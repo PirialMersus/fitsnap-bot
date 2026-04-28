@@ -10,6 +10,8 @@ const startHandler = require('./handlers/start');
 const photoHandler = require('./handlers/photo');
 const statsHandler = require('./handlers/stats');
 const historyHandler = require('./handlers/history');
+const duelMenuHandler = require('./handlers/duel');
+const User = require('./models/User');
 
 const bootstrap = async () => {
   try {
@@ -34,11 +36,49 @@ const bootstrap = async () => {
     });
     bot.hears('📊 Статистика за день', statsHandler);
     bot.hears('📜 История', historyHandler);
+    bot.hears('⚔️ Дуэли', duelMenuHandler);
+
+    // Обработка кнопки комментария
+    bot.action(/comment_(.+)/, async (ctx) => {
+      const targetChatId = ctx.match[1];
+      const chatId = ctx.from.id;
+      
+      await User.updateOne({ chatId }, { state: `awaiting_comment_${targetChatId}` });
+      await ctx.answerCbQuery();
+      await ctx.reply('Напиши свой комментарий к этому приему пищи (отправь его следующим сообщением):');
+    });
 
     // Обработка остальных текстовых сообщений
-    bot.on('text', (ctx) => {
+    bot.on('text', async (ctx) => {
+      const chatId = ctx.from.id;
+      const text = ctx.message.text;
+      
+      const user = await User.findOne({ chatId });
+      
+      if (user && user.state && user.state.startsWith('awaiting_comment_')) {
+        const targetChatId = parseInt(user.state.split('_')[2], 10);
+        const authorName = user.firstName || user.username || 'Напарник';
+        
+        try {
+          await ctx.telegram.sendMessage(
+            targetChatId, 
+            `💬 **Комментарий от ${authorName}:**\n\n"${text}"`,
+            { parse_mode: 'Markdown' }
+          );
+          await ctx.reply('✅ Комментарий отправлен напарнику!');
+        } catch (e) {
+          console.error('Не удалось отправить комментарий', e);
+          await ctx.reply('❌ Ошибка при отправке комментария (возможно напарник заблокировал бота).');
+        }
+        
+        // Сбрасываем стейт
+        await User.updateOne({ chatId }, { state: 'idle' });
+        return;
+      }
+
       ctx.reply('Я понимаю только фотографии еды или команды из меню. Пожалуйста, отправь фото! 📸');
     });
+
 
     // 4. Запускаем сервер (Express) и бота (через webhook или long polling)
     await startServer();

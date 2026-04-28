@@ -1,9 +1,11 @@
 const { Markup } = require('telegraf');
 const User = require('../models/User');
+const Duel = require('../models/Duel');
 
 const startHandler = async (ctx) => {
   try {
     const { id: chatId, username, first_name: firstName, last_name: lastName } = ctx.from;
+    const payload = ctx.payload;
 
     // Ищем или создаем пользователя
     let user = await User.findOne({ chatId });
@@ -16,6 +18,45 @@ const startHandler = async (ctx) => {
         lastName,
       });
       await user.save();
+    }
+
+    if (payload && payload.startsWith('duel_')) {
+      const inviterId = parseInt(payload.split('_')[1], 10);
+      if (inviterId && inviterId !== chatId) {
+        const inviter = await User.findOne({ chatId: inviterId });
+        if (inviter) {
+          const existingDuel = await Duel.findOne({
+            $or: [
+              { user1Id: inviterId, user2Id: chatId, status: 'active' },
+              { user1Id: chatId, user2Id: inviterId, status: 'active' }
+            ]
+          });
+          
+          if (!existingDuel) {
+            const newDuel = new Duel({
+              user1Id: inviterId,
+              user2Id: chatId
+            });
+            await newDuel.save();
+            
+            try {
+              await ctx.telegram.sendMessage(
+                inviterId, 
+                `⚔️ **Ура!** ${firstName || username || 'Новый напарник'} принял твой вызов на дуэль питания! Теперь вы будете видеть приемы пищи друг друга.`,
+                { parse_mode: 'Markdown' }
+              );
+            } catch (e) {
+              console.error('Не удалось отправить уведомление инициатору дуэли', e);
+            }
+            
+            await ctx.reply(`⚔️ **Дуэль началась!** Вы приняли вызов от ${inviter.firstName || inviter.username || 'Напарника'}. Теперь вы следите за питанием друг друга!`, { parse_mode: 'Markdown' });
+          } else {
+            await ctx.reply('Вы уже состоите в дуэли с этим пользователем! ⚔️');
+          }
+        }
+      } else if (inviterId === chatId) {
+        await ctx.reply('Вы не можете начать дуэль с самим собой! 😅');
+      }
     }
 
     const welcomeMessage = `
@@ -40,8 +81,10 @@ const startHandler = async (ctx) => {
 
     const mainMenu = Markup.keyboard([
       ['📸 Добавить еду'],
-      ['📊 Статистика за день', '📜 История']
+      ['📊 Статистика за день', '📜 История'],
+      ['⚔️ Дуэли']
     ]).resize();
+
 
     await ctx.replyWithMarkdown(welcomeMessage, mainMenu);
   } catch (error) {

@@ -16,6 +16,10 @@ const userSchema = new mongoose.Schema({
   lastName: {
     type: String,
   },
+  state: {
+    type: String,
+    default: 'idle',
+  },
   createdAt: {
     type: Date,
     default: Date.now,

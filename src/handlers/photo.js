@@ -61,6 +61,41 @@ const photoHandler = async (ctx) => {
       { parse_mode: 'Markdown' }
     );
 
+    // --- ЛОГИКА ДУЭЛЕЙ ---
+    // Ищем всех активных напарников
+    const Duel = require('../models/Duel');
+    const { Markup } = require('telegraf');
+    
+    const activeDuels = await Duel.find({
+      $or: [{ user1Id: chatId }, { user2Id: chatId }],
+      status: 'active'
+    });
+
+    if (activeDuels.length > 0) {
+      const User = require('../models/User');
+      const author = await User.findOne({ chatId });
+      const authorName = author?.firstName || author?.username || 'Твой напарник';
+
+      const partnerCaption = `🍽 **${authorName} только что поел(а)!**\n\nБлюдо: ${foodData.name}\nКалории: ${foodData.calories} ккал\n\nЧто думаешь об этом выборе?`;
+
+      for (const duel of activeDuels) {
+        const partnerId = duel.user1Id === chatId ? duel.user2Id : duel.user1Id;
+        
+        try {
+          // Отправляем фото напарнику
+          await ctx.telegram.sendPhoto(partnerId, photo.file_id, {
+            caption: partnerCaption,
+            reply_markup: Markup.inlineKeyboard([
+              Markup.button.callback('💬 Прокомментировать', `comment_${chatId}`)
+            ]).reply_markup
+          });
+        } catch (err) {
+          console.error(`Не удалось отправить фото напарнику ${partnerId}:`, err.message);
+        }
+      }
+    }
+
+
   } catch (error) {
     console.error('КРИТИЧЕСКАЯ ОШИБКА в photoHandler:', {
       message: error.message,
