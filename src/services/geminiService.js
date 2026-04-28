@@ -70,8 +70,13 @@ const analyzeFoodPhoto = async (photoUrl) => {
     
     return JSON.parse(cleanedText);
   } catch (error) {
-    console.error('Ошибка при анализе фото через Gemini:', error);
-    throw new Error('Не удалось проанализировать фото.');
+    console.error('ОШИБКА GEMINI API:', {
+      status: error.status,
+      statusText: error.statusText,
+      message: error.message,
+      details: error.errorDetails
+    });
+    throw new Error(`Ошибка Gemini: ${error.message}`);
   }
 };
 

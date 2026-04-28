@@ -62,14 +62,23 @@ const photoHandler = async (ctx) => {
     );
 
   } catch (error) {
-    console.error('Ошибка в photoHandler:', error);
+    console.error('КРИТИЧЕСКАЯ ОШИБКА в photoHandler:', {
+      message: error.message,
+      stack: error.stack,
+      data: error.response?.data // если ошибка от axios
+    });
     
+    // Пытаемся отправить более детальное сообщение пользователю (только для отладки)
+    const errorMessage = process.env.NODE_ENV === 'development' 
+      ? `❌ Ошибка: ${error.message}` 
+      : '❌ Извините, не удалось распознать еду на фото или произошла системная ошибка. Попробуйте сфотографировать блюдо с другого ракурса.';
+
     await ctx.telegram.editMessageText(
       chatId,
       statusMessage.message_id,
       null,
-      '❌ Извините, не удалось распознать еду на фото или произошла системная ошибка. Попробуйте сфотографировать блюдо с другого ракурса.'
-    );
+      errorMessage
+    ).catch(e => console.error('Не удалось обновить статусное сообщение:', e.message));
   }
 };
 
