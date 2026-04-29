@@ -1,4 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 const config = require('../config');
 const axios = require('axios');
 
@@ -13,8 +13,7 @@ if (config.geminiApiKey) {
 const fetchImageForGemini = async (url) => {
   const response = await axios.get(url, { responseType: 'arraybuffer' });
   let mimeType = response.headers['content-type'];
-  
-  // Если MIME тип не определен или является общим потоком, ставим image/jpeg (стандарт для фото в Telegram)
+
   if (!mimeType || mimeType === 'application/octet-stream') {
     mimeType = 'image/jpeg';
   }
@@ -28,16 +27,47 @@ const fetchImageForGemini = async (url) => {
 };
 
 /**
+ * Вспомогательная функция для повторных попыток при перегрузке API
+ */
+const retryRequest = async (fn, retries = 3, delay = 2000) => {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      const errorMessage = error.message.toLowerCase();
+      const isRetryable = errorMessage.includes('503') || 
+                          errorMessage.includes('overloaded') || 
+                          errorMessage.includes('429') ||
+                          errorMessage.includes('service unavailable');
+      
+      if (isRetryable && i < retries - 1) {
+        console.warn(`Gemini перегружен (попытка ${i + 1}/${retries}). Ожидание ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+        continue;
+      }
+      throw error;
+    }
+  }
+};
+
+/**
  * Анализирует фото еды и возвращает JSON с БЖУ и калориями
- * @param {string} photoUrl - URL фотографии
- * @returns {Promise<Object>}
  */
 const analyzeFoodPhoto = async (photoUrl) => {
   if (!genAI) {
     throw new Error('GEMINI_API_KEY не задан!');
   }
 
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-3-flash-preview',
+    safetySettings: [
+      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    ]
+  });
 
   const prompt = `
 Ты профессиональный нутрициолог. Посмотри на это фото еды и сделай оценку:
@@ -62,20 +92,28 @@ const analyzeFoodPhoto = async (photoUrl) => {
 
   try {
     const imagePart = await fetchImageForGemini(photoUrl);
-    const result = await model.generateContent([prompt, imagePart]);
-    const responseText = result.response.text();
     
-    // Очищаем ответ от возможных маркдаун-тегов ```json ... ```
+    const result = await retryRequest(() => model.generateContent([prompt, imagePart]));
+    const response = await result.response;
+
+    if (response.candidates && response.candidates[0].finishReason === 'SAFETY') {
+      throw new Error('ИИ заблокировал анализ этого фото из-за фильтров безопасности. Попробуйте другое фото.');
+    }
+
+    const responseText = response.text();
     const cleanedText = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     return JSON.parse(cleanedText);
   } catch (error) {
     console.error('ОШИБКА GEMINI API:', {
-      status: error.status,
-      statusText: error.statusText,
       message: error.message,
-      details: error.errorDetails
+      stack: error.stack
     });
+
+    if (error.message.includes('Text not available')) {
+      throw new Error('ИИ не смог сгенерировать ответ. Возможно, изображение слишком размытое или заблокировано фильтрами.');
+    }
+
     throw new Error(`Ошибка Gemini: ${error.message}`);
   }
 };

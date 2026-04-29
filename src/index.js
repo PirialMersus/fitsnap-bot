@@ -42,7 +42,7 @@ const bootstrap = async () => {
     bot.action(/comment_(.+)/, async (ctx) => {
       const targetChatId = ctx.match[1];
       const chatId = ctx.from.id;
-      
+
       await User.updateOne({ chatId }, { state: `awaiting_comment_${targetChatId}` });
       await ctx.answerCbQuery();
       await ctx.reply('Напиши свой комментарий к этому приему пищи (отправь его следующим сообщением):');
@@ -52,16 +52,16 @@ const bootstrap = async () => {
     bot.on('text', async (ctx) => {
       const chatId = ctx.from.id;
       const text = ctx.message.text;
-      
+
       const user = await User.findOne({ chatId });
-      
+
       if (user && user.state && user.state.startsWith('awaiting_comment_')) {
         const targetChatId = parseInt(user.state.split('_')[2], 10);
         const authorName = user.firstName || user.username || 'Напарник';
-        
+
         try {
           await ctx.telegram.sendMessage(
-            targetChatId, 
+            targetChatId,
             `💬 **Комментарий от ${authorName}:**\n\n"${text}"`,
             { parse_mode: 'Markdown' }
           );
@@ -70,7 +70,7 @@ const bootstrap = async () => {
           console.error('Не удалось отправить комментарий', e);
           await ctx.reply('❌ Ошибка при отправке комментария (возможно напарник заблокировал бота).');
         }
-        
+
         // Сбрасываем стейт
         await User.updateOne({ chatId }, { state: 'idle' });
         return;
