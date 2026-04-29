@@ -10,7 +10,7 @@ const startHandler = require('./handlers/start');
 const photoHandler = require('./handlers/photo');
 const statsHandler = require('./handlers/stats');
 const historyHandler = require('./handlers/history');
-const duelMenuHandler = require('./handlers/duel');
+const { duelMenuHandler, deleteDuelHandler } = require('./handlers/duel');
 const User = require('./models/User');
 
 const bootstrap = async () => {
@@ -47,6 +47,9 @@ const bootstrap = async () => {
       await ctx.answerCbQuery();
       await ctx.reply('Напиши свой комментарий к этому приему пищи (отправь его следующим сообщением):');
     });
+
+    // Обработка удаления дуэли
+    bot.action(/delete_duel_(.+)/, deleteDuelHandler);
 
     // Обработка остальных текстовых сообщений
     bot.on('text', async (ctx) => {

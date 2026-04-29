@@ -77,6 +77,8 @@ const analyzeFoodPhoto = async (photoUrl) => {
 4. Белки в граммах (proteins).
 5. Жиры в граммах (fats).
 6. Углеводы в граммах (carbs).
+7. Оценка полезности блюда по шкале от 1 до 10 (healthScore).
+8. Коэффициент совместимости ингредиентов или блюд на фото по шкале от 1 до 10 (compatibilityScore). Если на фото одно простое блюдо, поставь 10.
 
 Твой ответ ДОЛЖЕН быть строго в формате JSON, без маркдауна, без комментариев и без лишнего текста.
 Пример:
@@ -86,7 +88,9 @@ const analyzeFoodPhoto = async (photoUrl) => {
   "calories": 450,
   "proteins": 25,
   "fats": 35,
-  "carbs": 5
+  "carbs": 5,
+  "healthScore": 6,
+  "compatibilityScore": 9
 }
 `;
 

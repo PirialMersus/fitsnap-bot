@@ -30,6 +30,14 @@ const mealSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  healthScore: {
+    type: Number,
+    default: 0,
+  },
+  compatibilityScore: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
